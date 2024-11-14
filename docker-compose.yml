@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   nginx:
     build:
@@ -12,26 +14,37 @@ services:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
-      - nginx_logs:/var/log/nginx
+      - ./logs/nginx:/var/log/nginx
     depends_on:
       - backend
     networks:
       - app-network
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   certbot:
     image: certbot/certbot:latest
+    ports:
+      - "80:80"
+      - "443:443"
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
-      - certbot_logs:/var/log/letsencrypt
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
-    restart: unless-stopped
-    depends_on:
-      - nginx
+      - ./logs/certbot:/var/log/letsencrypt
     networks:
       - app-network
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --standalone --preferred-challenges http --http-01-port=80 --debug --verbose; sleep 12h & wait $${!}; done;'"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -49,9 +62,15 @@ services:
     volumes:
       - ./server:/app/server
       - ./src:/app/src
+      - ./logs/backend:/app/logs
     networks:
       - app-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   mongodb:
     image: mongo:latest
@@ -59,9 +78,15 @@ services:
       - "27017"
     volumes:
       - mongodb_data:/data/db
+      - ./logs/mongo:/var/log/mongodb
     networks:
       - app-network
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 networks:
   app-network:
@@ -69,5 +94,9 @@ networks:
 
 volumes:
   mongodb_data:
-  nginx_logs:
-  certbot_logs:
+
+# Create local directories for logs
+x-setup: &setup
+  command: >
+    mkdir -p ./logs/nginx ./logs/certbot ./logs/backend ./logs/mongo &&
+    chmod -R 777 ./logs

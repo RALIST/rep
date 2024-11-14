@@ -1,108 +1,50 @@
 #!/bin/bash
 
-# Exit on error and enable command printing
-set -ex
+# Exit on error
+set -e
 
-if [ ! -f ".env" ]; then
-    echo "Error: .env file not found"
-    echo "Please copy .env.example to .env and configure it first"
-    exit 1
+# Get domain from .env file
+if [ -f .env ]; then
+    export $(cat .env | grep DOMAIN)
 fi
-
-# Load environment variables
-export $(cat .env | grep -v '^#' | xargs)
 
 if [ -z "$DOMAIN" ]; then
-    echo "Error: DOMAIN not set in .env file"
+    echo "DOMAIN not set in .env file"
     exit 1
 fi
 
-echo "Setting up SSL for domain: $DOMAIN"
-
-# Email for Let's Encrypt notifications
-read -p "Enter email for Let's Encrypt notifications: " email
-
-echo "Creating required directories..."
-mkdir -p ./certbot/conf
+# Create required directories
+mkdir -p ./certbot/conf/live/$DOMAIN
 mkdir -p ./certbot/www
+mkdir -p ./logs/certbot
 
-echo "Stopping existing containers..."
+# Stop any running containers
 docker-compose down
 
-echo "Cleaning up old certificates..."
+# Delete any existing certificates
 rm -rf ./certbot/conf/*
 
-echo "Creating initial dummy certificate..."
+# Create dummy certificates
 mkdir -p ./certbot/conf/live/$DOMAIN
-openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
-    -keyout ./certbot/conf/live/$DOMAIN/privkey.pem \
-    -out ./certbot/conf/live/$DOMAIN/fullchain.pem \
-    -subj "/CN=localhost"
+docker-compose run --rm --entrypoint "\
+    openssl req -x509 -nodes -newkey rsa:2048 -days 1\
+    -keyout '/etc/letsencrypt/live/$DOMAIN/privkey.pem' \
+    -out '/etc/letsencrypt/live/$DOMAIN/fullchain.pem' \
+    -subj '/CN=localhost'" certbot
 
-echo "Starting Nginx..."
+# Start nginx
 docker-compose up -d nginx
 
-# Wait for Nginx to start
-echo "Waiting for Nginx to start..."
-sleep 5
+# Delete dummy certificates
+rm -rf ./certbot/conf/live/$DOMAIN/*
 
-# Test Nginx configuration
-echo "Testing Nginx configuration..."
-if ! docker-compose exec -T nginx nginx -t; then
-    echo "Nginx configuration test failed"
-    docker-compose logs nginx
-    exit 1
-fi
+# Request real certificates
+docker-compose run --rm --entrypoint "\
+    certbot certonly --webroot -w /var/www/certbot \
+    --email admin@$DOMAIN --agree-tos --no-eff-email \
+    -d $DOMAIN" certbot
 
-echo "Removing dummy certificates..."
-rm -rf ./certbot/conf/live
-
-echo "Creating temporary certbot container..."
-# Use a timeout for certbot
-timeout 90s docker-compose run --rm certbot certonly \
-    --nginx \
-    --non-interactive \
-    --email $email \
-    --agree-tos \
-    --no-eff-email \
-    --force-renewal \
-    -d $DOMAIN || {
-        echo "Certbot failed or timed out"
-        docker-compose logs nginx
-        docker-compose down
-        exit 1
-    }
-
-echo "Verifying certificate creation..."
-if [ ! -d "./certbot/conf/live/$DOMAIN" ]; then
-    echo "Certificate creation failed!"
-    docker-compose logs nginx
-    docker-compose down
-    exit 1
-fi
-
-echo "Restarting Nginx..."
+# Restart nginx to load new certificates
 docker-compose restart nginx
 
-# Test HTTPS access
-echo "Testing HTTPS configuration..."
-sleep 5
-if ! curl -k https://localhost > /dev/null 2>&1; then
-    echo "HTTPS test failed"
-    docker-compose logs nginx
-    exit 1
-fi
-
-echo "Starting all services..."
-docker-compose up -d
-
-echo "Setup completed!"
-echo "Your site should now be accessible at:"
-echo "- https://$DOMAIN"
-echo ""
-echo "Note: Currently using staging certificates for testing."
-echo "Once you confirm everything works, edit this script"
-echo "and remove the --staging flag for production certificates."
-
-# Final status check
-./check-ssl.sh
+echo "Certificates successfully created"
