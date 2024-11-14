@@ -1,41 +1,78 @@
 # Russian Teacher Website
 
-## Docker Setup
+## Docker Setup with Automatic SSL
 
 ### Prerequisites
 
 - Docker
 - Docker Compose
+- Domain name pointing to your server
 
 ### Quick Start
 
-1. Copy the environment file:
+1. Copy the environment file and update it:
 
    ```bash
    cp .env.example .env
    ```
 
-2. Update the `.env` file with your Telegram credentials:
+   Update the following variables in `.env`:
 
    ```
    TELEGRAM_BOT_TOKEN=your_telegram_bot_token
    TELEGRAM_CHAT_ID=your_chat_id
+   DOMAIN=your-domain.com
    ```
 
-3. Build and start the container:
+2. Initialize SSL certificates:
 
    ```bash
-   docker-compose up --build
+   ./init-letsencrypt.sh
    ```
 
-4. Access the application at http://localhost:3001
+   This script will:
+
+   - Set up Let's Encrypt certificates for your domain
+   - Configure automatic renewal
+   - Create necessary directories
+   - Start the services with SSL enabled
+
+3. Start the services:
+
+   ```bash
+   docker-compose up -d
+   ```
+
+4. Access your application:
+   - HTTPS: https://your-domain.com
+   - HTTP will automatically redirect to HTTPS
+
+### SSL Certificate Management
+
+The setup includes automatic SSL certificate management:
+
+- Certificates are automatically obtained from Let's Encrypt
+- Auto-renewal runs every 12 hours
+- Nginx automatically reloads when certificates are renewed
+- Certificates are stored in `./certbot/conf`
 
 ### Docker Services
 
-The application runs in two containers:
+The application runs in four containers:
 
-- `backend`: Express.js API serving both the frontend and API (port 3001)
-- `mongodb`: MongoDB database (port 27017)
+- `nginx`: Reverse proxy with SSL termination (ports 80, 443)
+- `certbot`: Automatic SSL certificate management
+- `backend`: Express.js API serving both the frontend and API
+- `mongodb`: MongoDB database
+
+### Security Features
+
+- Automatic SSL certificate management with Let's Encrypt
+- HTTP to HTTPS redirection
+- Modern SSL configuration with strong ciphers
+- Security headers (HSTS, X-Frame-Options, etc.)
+- Backend server not directly exposed to the internet
+- MongoDB only accessible within Docker network
 
 ### Development with Docker
 
@@ -43,6 +80,7 @@ The application runs in two containers:
 - Backend hot-reload is enabled
 - MongoDB data persists in a named volume
 - Frontend is built and served by the backend container
+- Nginx handles SSL termination and reverse proxy
 
 ## Features
 
@@ -52,7 +90,9 @@ The application runs in two containers:
 - Responsive design
 - Error handling and user feedback
 - Docker containerization
-- Single server setup (frontend served by backend)
+- Automatic SSL with Let's Encrypt
+- Nginx reverse proxy
+- Secure headers and modern SSL configuration
 
 ## Development Stack
 
@@ -61,6 +101,8 @@ The application runs in two containers:
 - Database: MongoDB
 - Notifications: Telegram Bot API
 - Containerization: Docker & Docker Compose
+- SSL: Let's Encrypt with auto-renewal
+- Reverse Proxy: Nginx
 
 ## Project Structure
 
@@ -72,55 +114,58 @@ The application runs in two containers:
 ├── server/                 # Backend files
 │   ├── index.js           # Express server
 │   └── models/            # MongoDB models
+├── nginx/                  # Nginx configuration
+│   ├── nginx.conf         # Nginx config file
+│   └── Dockerfile         # Nginx container setup
+├── certbot/               # Let's Encrypt certificates
+│   ├── conf/              # Certificate configuration
+│   └── www/               # ACME challenge files
 ├── docker-compose.yml     # Docker Compose configuration
 ├── Dockerfile.backend     # Backend container configuration
+├── init-letsencrypt.sh   # SSL initialization script
 └── ...
 ```
-
-## Manual Development Setup
-
-If you want to run the application without Docker:
-
-1. Install dependencies:
-
-   ```bash
-   npm install
-   ```
-
-2. Start MongoDB locally
-
-3. Configure environment variables:
-
-   - Copy `.env.example` to `.env`
-   - Update the variables
-
-4. Build the frontend:
-
-   ```bash
-   npm run build
-   ```
-
-5. Start the server:
-
-   ```bash
-   npm run server
-   ```
-
-6. Access the application at http://localhost:3001
 
 ## Production Deployment
 
 Before deploying to production:
 
-1. Configure production environment variables
-2. Ensure MongoDB is properly secured
-3. Set up proper SSL/TLS certificates
-4. Configure proper backup strategy for MongoDB
+1. Ensure your domain's DNS records point to your server
+2. Configure production environment variables
+3. Ensure MongoDB is properly secured
+4. Set up proper backup strategy for MongoDB
 5. Update Telegram webhook URLs if needed
 
 To deploy:
 
-1. Build and push Docker images to your registry
-2. Deploy using docker-compose or your preferred orchestration tool
-3. Set up proper monitoring and logging
-4. Configure reverse proxy with SSL termination
+1. Clone the repository to your production server
+2. Copy `.env.example` to `.env` and configure it
+3. Run `./init-letsencrypt.sh` to set up SSL
+4. Start services with `docker-compose up -d`
+5. Set up monitoring and logging
+
+### Monitoring
+
+Consider setting up:
+
+1. Container health monitoring
+2. SSL certificate expiration monitoring
+3. MongoDB backup verification
+4. Application logs aggregation
+5. System resource monitoring
+
+### Troubleshooting
+
+If you encounter SSL issues:
+
+1. Check domain DNS configuration
+2. Verify Let's Encrypt rate limits
+3. Check Certbot logs: `docker-compose logs certbot`
+4. Check Nginx logs: `docker-compose logs nginx`
+5. Ensure ports 80 and 443 are accessible
+
+To manually renew certificates:
+
+```bash
+docker-compose run --rm certbot renew
+```
