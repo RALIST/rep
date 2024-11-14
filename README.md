@@ -1,6 +1,6 @@
 # Russian Teacher Website
 
-## Docker Setup with Automatic SSL
+## Docker Setup with SSL
 
 ### Prerequisites
 
@@ -24,37 +24,70 @@
    DOMAIN=your-domain.com
    ```
 
-2. Initialize SSL certificates:
+2. Initialize SSL certificates (staging environment first):
 
    ```bash
    ./init-letsencrypt.sh
    ```
 
-   This script will:
+   This will:
 
-   - Set up Let's Encrypt certificates for your domain
-   - Configure automatic renewal
    - Create necessary directories
-   - Start the services with SSL enabled
+   - Generate staging certificates
+   - Configure Nginx
+   - Set up auto-renewal
 
-3. Start the services:
+3. Check SSL setup:
 
    ```bash
-   docker-compose up -d
+   ./check-ssl.sh
    ```
 
-4. Access your application:
-   - HTTPS: https://your-domain.com
-   - HTTP will automatically redirect to HTTPS
+   This will display:
 
-### SSL Certificate Management
+   - Certificate status
+   - Nginx configuration
+   - Error logs
+   - ACME challenge status
 
-The setup includes automatic SSL certificate management:
+4. Switch to production certificates:
 
-- Certificates are automatically obtained from Let's Encrypt
-- Auto-renewal runs every 12 hours
-- Nginx automatically reloads when certificates are renewed
-- Certificates are stored in `./certbot/conf`
+   Edit `init-letsencrypt.sh` and remove the `--staging` flag, then run:
+
+   ```bash
+   ./init-letsencrypt.sh
+   ```
+
+### SSL Troubleshooting
+
+If you encounter SSL issues:
+
+1. Check domain DNS:
+
+   ```bash
+   dig +short your-domain.com
+   ```
+
+   Should show your server's IP.
+
+2. Verify ACME challenge:
+
+   ```bash
+   curl -v http://your-domain.com/.well-known/acme-challenge/test
+   ```
+
+   Should be accessible.
+
+3. Check logs:
+
+   ```bash
+   ./check-ssl.sh
+   ```
+
+4. Common issues:
+   - DNS not propagated: Wait 24-48 hours
+   - Port 80/443 blocked: Check firewall
+   - Rate limits: Use staging until configuration is correct
 
 ### Docker Services
 
@@ -62,110 +95,105 @@ The application runs in four containers:
 
 - `nginx`: Reverse proxy with SSL termination (ports 80, 443)
 - `certbot`: Automatic SSL certificate management
-- `backend`: Express.js API serving both the frontend and API
+- `backend`: Express.js API serving both frontend and API
 - `mongodb`: MongoDB database
 
 ### Security Features
 
-- Automatic SSL certificate management with Let's Encrypt
+- Automatic SSL certificate management
 - HTTP to HTTPS redirection
-- Modern SSL configuration with strong ciphers
-- Security headers (HSTS, X-Frame-Options, etc.)
-- Backend server not directly exposed to the internet
-- MongoDB only accessible within Docker network
+- Modern SSL configuration
+- Security headers
+- Regular certificate renewal
+- Isolated container network
 
 ### Development with Docker
 
-- The source code is mounted as volumes, so changes will reflect immediately
-- Backend hot-reload is enabled
-- MongoDB data persists in a named volume
-- Frontend is built and served by the backend container
-- Nginx handles SSL termination and reverse proxy
+- Source code hot-reload
+- Automatic certificate renewal
+- MongoDB persistence
+- Comprehensive logging
 
 ## Features
 
 - Contact form with validation
 - MongoDB database storage
-- Telegram notifications for new submissions
+- Telegram notifications
 - Responsive design
-- Error handling and user feedback
+- Error handling
 - Docker containerization
-- Automatic SSL with Let's Encrypt
-- Nginx reverse proxy
-- Secure headers and modern SSL configuration
-
-## Development Stack
-
-- Frontend: React with Vite
-- Backend: Express.js
-- Database: MongoDB
-- Notifications: Telegram Bot API
-- Containerization: Docker & Docker Compose
-- SSL: Let's Encrypt with auto-renewal
-- Reverse Proxy: Nginx
+- Automatic SSL management
 
 ## Project Structure
 
 ```
 /
 ├── src/                    # Frontend source files
-│   ├── components/         # React components
-│   └── ...
 ├── server/                 # Backend files
-│   ├── index.js           # Express server
-│   └── models/            # MongoDB models
 ├── nginx/                  # Nginx configuration
-│   ├── nginx.conf         # Nginx config file
-│   └── Dockerfile         # Nginx container setup
-├── certbot/               # Let's Encrypt certificates
-│   ├── conf/              # Certificate configuration
-│   └── www/               # ACME challenge files
-├── docker-compose.yml     # Docker Compose configuration
-├── Dockerfile.backend     # Backend container configuration
-├── init-letsencrypt.sh   # SSL initialization script
+├── certbot/               # SSL certificates
+├── docker-compose.yml     # Docker configuration
+├── init-letsencrypt.sh   # SSL setup script
+├── check-ssl.sh          # SSL debugging script
 └── ...
 ```
 
 ## Production Deployment
 
-Before deploying to production:
-
-1. Ensure your domain's DNS records point to your server
-2. Configure production environment variables
-3. Ensure MongoDB is properly secured
-4. Set up proper backup strategy for MongoDB
-5. Update Telegram webhook URLs if needed
-
-To deploy:
-
-1. Clone the repository to your production server
-2. Copy `.env.example` to `.env` and configure it
-3. Run `./init-letsencrypt.sh` to set up SSL
-4. Start services with `docker-compose up -d`
-5. Set up monitoring and logging
+1. Point domain to server IP
+2. Configure environment variables
+3. Run staging SSL setup
+4. Verify configuration
+5. Switch to production certificates
+6. Monitor logs and renewal
 
 ### Monitoring
 
-Consider setting up:
+Monitor these aspects:
 
-1. Container health monitoring
-2. SSL certificate expiration monitoring
-3. MongoDB backup verification
-4. Application logs aggregation
-5. System resource monitoring
+1. Certificate status:
 
-### Troubleshooting
+   ```bash
+   ./check-ssl.sh
+   ```
 
-If you encounter SSL issues:
+2. Container health:
 
-1. Check domain DNS configuration
-2. Verify Let's Encrypt rate limits
-3. Check Certbot logs: `docker-compose logs certbot`
-4. Check Nginx logs: `docker-compose logs nginx`
-5. Ensure ports 80 and 443 are accessible
+   ```bash
+   docker-compose ps
+   ```
 
-To manually renew certificates:
+3. Logs:
+   ```bash
+   docker-compose logs --tail=100 -f
+   ```
+
+### Certificate Renewal
+
+Certificates auto-renew every 12 hours if needed. To force renewal:
 
 ```bash
-docker-compose run --rm certbot renew
+docker-compose run --rm certbot renew --force-renewal
+docker-compose exec nginx nginx -s reload
 ```
+
+### Backup
+
+1. SSL certificates:
+
+   ```bash
+   tar czf ssl-backup.tar.gz certbot/conf
+   ```
+
+2. MongoDB data:
+   ```bash
+   docker-compose exec mongodb mongodump --out /data/db/backup
+   ```
+
+### Security Best Practices
+
+1. Keep Docker and packages updated
+2. Monitor certificate expiration
+3. Regular security audits
+4. Backup certificates and data
+5. Monitor logs for unusual activity
