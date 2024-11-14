@@ -1,0 +1,40 @@
+FROM node:18-alpine AS builder
+
+# Set working directory for frontend build
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm install
+
+# Copy frontend source
+COPY . .
+
+# Build frontend
+RUN npm run build
+
+# Start fresh for backend
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm install --production
+
+# Copy backend source
+COPY server ./server
+
+# Copy built frontend from builder stage
+COPY --from=builder /app/dist ./dist
+
+# Copy environment file
+COPY .env.example .env
+
+EXPOSE 3001
+
+CMD ["npm", "run", "server"]

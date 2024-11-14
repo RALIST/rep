@@ -255,6 +255,25 @@ const SuccessMessage = styled.div`
   }
 `;
 
+const ErrorMessage = styled.div`
+  text-align: center;
+  color: #e74c3c;
+  font-size: clamp(1rem, 2.5vw, 1.2rem);
+  padding: 1.5rem;
+  background: rgba(231, 76, 60, 0.1);
+  border-radius: 10px;
+  margin-top: 1.5rem;
+  animation: ${fadeIn} 0.3s ease-out;
+  border: 2px solid rgba(231, 76, 60, 0.2);
+
+  &::before {
+    content: '!';
+    display: block;
+    font-size: clamp(1.5rem, 4vw, 2rem);
+    margin-bottom: 0.5rem;
+  }
+`;
+
 const ContactForm = () => {
   const [formData, setFormData] = useState({
     name: '',
@@ -263,6 +282,8 @@ const ContactForm = () => {
     message: ''
   });
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -272,17 +293,38 @@ const ContactForm = () => {
     }));
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Here you would typically send the form data to a server
-    console.log('Form submitted:', formData);
-    setIsSubmitted(true);
-    setFormData({
-      name: '',
-      email: '',
-      phone: '',
-      message: ''
-    });
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Что-то пошло не так. Пожалуйста, попробуйте позже.');
+      }
+
+      setIsSubmitted(true);
+      setFormData({
+        name: '',
+        email: '',
+        phone: '',
+        message: ''
+      });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -304,6 +346,7 @@ const ContactForm = () => {
               onChange={handleChange}
               required
               placeholder="Ваше имя"
+              disabled={isSubmitting}
             />
           </InputGroup>
           
@@ -317,6 +360,7 @@ const ContactForm = () => {
               onChange={handleChange}
               required
               placeholder="example@mail.com"
+              disabled={isSubmitting}
             />
           </InputGroup>
           
@@ -330,6 +374,7 @@ const ContactForm = () => {
               onChange={handleChange}
               required
               placeholder="+7 (___) ___-__-__"
+              disabled={isSubmitting}
             />
           </InputGroup>
           
@@ -342,11 +387,12 @@ const ContactForm = () => {
               onChange={handleChange}
               required
               placeholder="Поделитесь, чего вы хотите достичь, какие сложности испытываете, или задайте любые вопросы"
+              disabled={isSubmitting}
             />
           </InputGroup>
           
-          <SubmitButton type="submit">
-            <span>Записаться на пробный урок</span>
+          <SubmitButton type="submit" disabled={isSubmitting}>
+            <span>{isSubmitting ? 'Отправка...' : 'Записаться на пробный урок'}</span>
           </SubmitButton>
         </Form>
         
@@ -355,6 +401,12 @@ const ContactForm = () => {
             Спасибо за ваше сообщение! Я свяжусь с вами в ближайшее время, 
             чтобы обсудить все детали и ответить на ваши вопросы.
           </SuccessMessage>
+        )}
+
+        {error && (
+          <ErrorMessage>
+            {error}
+          </ErrorMessage>
         )}
       </FormContainer>
     </ContactSection>
