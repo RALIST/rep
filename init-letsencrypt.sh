@@ -60,8 +60,7 @@ rm -rf ./certbot/conf/live
 echo "Creating temporary certbot container..."
 # Use a timeout for certbot
 timeout 90s docker-compose run --rm certbot certonly \
-    --webroot \
-    --webroot-path=/var/www/certbot \
+    --nginx
     --email $email \
     --agree-tos \
     --no-eff-email \
