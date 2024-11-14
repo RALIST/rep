@@ -42,7 +42,7 @@ docker-compose up --force-recreate -d nginx
 # Remove dummy certificates
 rm -rf ./certbot/conf/*
 
-# Request Let's Encrypt certificate
+# Request Let's Encrypt certificate for both www and non-www
 docker-compose run --rm certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
@@ -50,13 +50,15 @@ docker-compose run --rm certbot certonly \
     --agree-tos \
     --no-eff-email \
     --force-renewal \
-    -d $DOMAIN
+    -d $DOMAIN -d www.$DOMAIN
 
 # Reload Nginx
 docker-compose exec nginx nginx -s reload
 
 echo "SSL certificates have been generated successfully!"
-echo "Your site should now be accessible at https://$DOMAIN"
+echo "Your site should now be accessible at:"
+echo "- https://$DOMAIN"
+echo "- https://www.$DOMAIN"
 echo "Certificates will be renewed automatically every 12 hours if needed"
 
 # Start all services
