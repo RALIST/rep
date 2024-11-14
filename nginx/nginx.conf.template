@@ -67,8 +67,8 @@ http {
         error_log /var/log/nginx/ssl_error.log debug;
 
         # SSL configuration
-        ssl_certificate ./certbot/conf/live/${DOMAIN}/fullchain.pem;
-        ssl_certificate_key ./certbot/conf/live/${DOMAIN}/privkey.pem;
+        ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+        ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
 
         # SSL parameters
         ssl_protocols TLSv1.2 TLSv1.3;
