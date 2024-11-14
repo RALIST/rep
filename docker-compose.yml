@@ -29,16 +29,15 @@ services:
 
   certbot:
     image: certbot/certbot:latest
-    ports:
-      - "80:80"
-      - "443:443"
     volumes:
       - ./certbot/conf:/etc/letsencrypt
       - ./certbot/www:/var/www/certbot
       - ./logs/certbot:/var/log/letsencrypt
+    environment:
+      - DOMAIN=${DOMAIN}
     networks:
       - app-network
-    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --standalone --preferred-challenges http --http-01-port=80 --debug --verbose; sleep 12h & wait $${!}; done;'"
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --email admin@$DOMAIN --agree-tos --no-eff-email; sleep 12h & wait $${!}; done;'"
     restart: unless-stopped
     logging:
       driver: "json-file"
