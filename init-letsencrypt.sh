@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Exit on error and print commands
+# Exit on error and enable command printing
 set -ex
 
 if [ ! -f ".env" ]; then
@@ -23,72 +23,86 @@ echo "Setting up SSL for domain: $DOMAIN"
 read -p "Enter email for Let's Encrypt notifications: " email
 
 echo "Creating required directories..."
-# Create required directories
 mkdir -p ./certbot/conf
 mkdir -p ./certbot/www
 
 echo "Stopping existing containers..."
-# Stop any running containers
 docker-compose down
 
 echo "Cleaning up old certificates..."
-# Delete any existing certificates
 rm -rf ./certbot/conf/*
 
-echo "Creating dummy certificates..."
-# Create dummy certificates for initial Nginx start
+echo "Creating initial dummy certificate..."
 mkdir -p ./certbot/conf/live/$DOMAIN
 openssl req -x509 -nodes -newkey rsa:2048 -days 1 \
     -keyout ./certbot/conf/live/$DOMAIN/privkey.pem \
     -out ./certbot/conf/live/$DOMAIN/fullchain.pem \
-    -subj "/CN=$DOMAIN"
+    -subj "/CN=localhost"
 
-echo "Starting Nginx with dummy certificates..."
-# Start Nginx
-docker-compose up --force-recreate -d nginx
+echo "Starting Nginx..."
+docker-compose up -d nginx
 
+# Wait for Nginx to start
 echo "Waiting for Nginx to start..."
 sleep 5
 
+# Test Nginx configuration
+echo "Testing Nginx configuration..."
+if ! docker-compose exec -T nginx nginx -t; then
+    echo "Nginx configuration test failed"
+    docker-compose logs nginx
+    exit 1
+fi
+
 echo "Removing dummy certificates..."
-# Remove dummy certificates
 rm -rf ./certbot/conf/live
 
-echo "Requesting Let's Encrypt certificates..."
-# Request Let's Encrypt certificate
-docker-compose run --rm certbot certonly \
+echo "Creating temporary certbot container..."
+# Use a timeout for certbot
+timeout 90s docker-compose run --rm certbot certonly \
     --webroot \
     --webroot-path=/var/www/certbot \
     --email $email \
     --agree-tos \
     --no-eff-email \
     --force-renewal \
-    -d $DOMAIN -d www.$DOMAIN \
-    --staging  # Remove this flag for production certificates
+    -d $DOMAIN || {
+        echo "Certbot failed or timed out"
+        docker-compose logs nginx
+        docker-compose down
+        exit 1
+    }
 
 echo "Verifying certificate creation..."
-if [ -d "./certbot/conf/live/$DOMAIN" ]; then
-    echo "Certificates created successfully!"
-else
+if [ ! -d "./certbot/conf/live/$DOMAIN" ]; then
     echo "Certificate creation failed!"
     docker-compose logs nginx
-    docker-compose logs certbot
+    docker-compose down
     exit 1
 fi
 
-echo "Reloading Nginx..."
-# Reload Nginx
-docker-compose exec nginx nginx -s reload
+echo "Restarting Nginx..."
+docker-compose restart nginx
+
+# Test HTTPS access
+echo "Testing HTTPS configuration..."
+sleep 5
+if ! curl -k https://localhost > /dev/null 2>&1; then
+    echo "HTTPS test failed"
+    docker-compose logs nginx
+    exit 1
+fi
 
 echo "Starting all services..."
-# Start all services
 docker-compose up -d
 
 echo "Setup completed!"
 echo "Your site should now be accessible at:"
 echo "- https://$DOMAIN"
-echo "- https://www.$DOMAIN"
 echo ""
 echo "Note: Currently using staging certificates for testing."
-echo "Once you confirm everything works, remove the --staging flag"
-echo "from the script and run it again for production certificates."
+echo "Once you confirm everything works, edit this script"
+echo "and remove the --staging flag for production certificates."
+
+# Final status check
+./check-ssl.sh

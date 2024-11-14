@@ -21,21 +21,22 @@ http {
         server backend:3001;
     }
 
-    # HTTP - redirect all traffic to HTTPS except ACME challenge
+    # HTTP server for ACME challenges and redirects
     server {
-        listen 80 default_server;
-        listen [::]:80 default_server;
-        server_name ${DOMAIN} www.${DOMAIN};
+        listen 80;
+        listen [::]:80;
+        server_name _;
 
         # Enhanced logging for ACME challenges
         error_log /var/log/nginx/acme_error.log debug;
         access_log /var/log/nginx/acme_access.log;
 
         # Allow ACME challenge for Let's Encrypt
-        location /.well-known/acme-challenge/ {
+        location ^~ /.well-known/acme-challenge/ {
+            allow all;
             root /var/www/certbot;
             try_files $uri =404;
-            allow all;
+            break;
         }
 
         # Redirect all other HTTP traffic to HTTPS
@@ -44,11 +45,11 @@ http {
         }
     }
 
-    # HTTPS
+    # HTTPS server
     server {
-        listen 443 ssl http2;
-        listen [::]:443 ssl http2;
-        server_name ${DOMAIN} www.${DOMAIN};
+        listen 443 ssl;
+        listen [::]:443 ssl;
+        server_name ${DOMAIN};
 
         # Enhanced SSL logging
         error_log /var/log/nginx/ssl_error.log debug;
@@ -65,8 +66,7 @@ http {
         ssl_session_timeout 1d;
         ssl_session_cache shared:SSL:50m;
         ssl_session_tickets off;
-        ssl_stapling off;  # Disable OCSP stapling for staging certificates
-        
+
         # Security headers
         add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
         add_header X-Frame-Options "SAMEORIGIN" always;
@@ -87,17 +87,12 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
 
-            # Enhanced error handling
+            # Error handling
             proxy_intercept_errors on;
             error_page 500 502 503 504 /50x.html;
         }
 
-        # Error pages
-        location = /50x.html {
-            root /usr/share/nginx/html;
-        }
-
-        # Cache static files
+        # Static files
         location /assets {
             proxy_pass http://backend;
             proxy_cache_use_stale error timeout http_500 http_502 http_503 http_504;

@@ -21,6 +21,7 @@ services:
       - app-network
     command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     restart: unless-stopped
+    user: root
 
   certbot:
     image: certbot/certbot:latest
@@ -30,6 +31,10 @@ services:
       - certbot_logs:/var/log/letsencrypt
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew --webroot -w /var/www/certbot --quiet; sleep 12h & wait $${!}; done;'"
     restart: unless-stopped
+    depends_on:
+      - nginx
+    networks:
+      - app-network
 
   backend:
     build:
